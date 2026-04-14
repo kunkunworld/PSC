@@ -22,15 +22,21 @@ def _normalize_to_uint8(image: torch.Tensor) -> Image.Image:
     return Image.fromarray(array, mode="L")
 
 
-def _save_atom_diagnostics(
-    psi: torch.Tensor, measure_p: int, measure_q: int, debug: bool, debug_size: int
-) -> None:
-    output_dir = Path("outputs") / "psi_atoms"
+def save_atom_visualizations(
+    psi: torch.Tensor,
+    measure_p: int,
+    measure_q: int,
+    output_dir: str | Path = Path("outputs") / "psi_atoms",
+    debug: bool = True,
+    debug_size: int = 32,
+    num_atoms: int = 5,
+) -> list[int]:
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     generator = torch.Generator(device="cpu")
     generator.manual_seed(0)
-    atom_indices = torch.randperm(psi.shape[1], generator=generator)[:5].tolist()
+    atom_indices = torch.randperm(psi.shape[1], generator=generator)[:num_atoms].tolist()
     mode_name = f"debug_{debug_size}" if debug else "full_80"
 
     for atom_idx in atom_indices:
@@ -41,6 +47,20 @@ def _save_atom_diagnostics(
         real_image.save(output_dir / f"{mode_name}_atom_{atom_idx}_real.png")
         imag_image.save(output_dir / f"{mode_name}_atom_{atom_idx}_imag.png")
         phase_image.save(output_dir / f"{mode_name}_atom_{atom_idx}_phase.png")
+
+    return atom_indices
+
+
+def summarize_psi(psi: torch.Tensor) -> dict[str, float | str | tuple[int, ...]]:
+    norm_values = torch.linalg.vector_norm(psi, ord=2, dim=0)
+    return {
+        "shape": tuple(psi.shape),
+        "dtype": str(psi.dtype),
+        "device": str(psi.device),
+        "norm_min": norm_values.min().item(),
+        "norm_max": norm_values.max().item(),
+        "norm_mean": norm_values.mean().item(),
+    }
 
 
 def build_psc_dictionary(
@@ -106,14 +126,21 @@ def build_psc_dictionary(
     column_norms = torch.linalg.vector_norm(psi, ord=2, dim=0, keepdim=True).clamp_min(1e-12)
     psi = psi / column_norms
 
-    norm_values = torch.linalg.vector_norm(psi, ord=2, dim=0)
+    psi_summary = summarize_psi(psi)
     print(f"Psi shape: {psi.shape}, dtype: {psi.dtype}, device: {psi.device}")
     print(
         "Psi column norms: "
-        f"min={norm_values.min().item():.6f}, "
-        f"max={norm_values.max().item():.6f}, "
-        f"mean={norm_values.mean().item():.6f}"
+        f"min={psi_summary['norm_min']:.6f}, "
+        f"max={psi_summary['norm_max']:.6f}, "
+        f"mean={psi_summary['norm_mean']:.6f}"
     )
 
-    _save_atom_diagnostics(psi, measure_p, measure_q, debug=debug, debug_size=debug_size)
+    save_atom_visualizations(
+        psi,
+        measure_p,
+        measure_q,
+        output_dir=Path("outputs") / "psi_atoms",
+        debug=debug,
+        debug_size=debug_size,
+    )
     return psi

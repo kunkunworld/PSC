@@ -1,0 +1,8 @@
+Full 80x80 Feasibility Test
+Target shape: (6400, 6400)
+Estimated dictionary memory: 312.50 MiB
+Estimated bottleneck: full construction needs the final complex dictionary plus large temporary phase / atom blocks during chunked assembly.
+Chunk-start probe success: True
+Probe time: 0.000017s
+Probe error: none
+Recommendation: full 80x80 is plausible on CPU memory grounds for the final tensor itself, but temporary allocations and runtime will likely become the main bottleneck before training is practical.

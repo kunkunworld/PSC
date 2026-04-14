@@ -1,0 +1,5 @@
+Dictionary Scaling Report
+32x32: shape=(1024, 1024), time=0.018s, estimated_mib=8.00, actual_mib=8.00, success=True, error=none
+40x40: shape=(1600, 1600), time=0.021s, estimated_mib=19.53, actual_mib=19.53, success=True, error=none
+48x48: shape=(2304, 2304), time=0.033s, estimated_mib=40.50, actual_mib=40.50, success=True, error=none
+64x64: shape=(4096, 4096), time=0.115s, estimated_mib=128.00, actual_mib=128.00, success=True, error=none

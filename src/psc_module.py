@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from src.config import H, W
-from src.psc_dictionary import build_psc_dictionary
+from src.psc_dictionary import build_psc_dictionary, summarize_psi
 
 
 class HQSStage(nn.Module):
@@ -97,3 +97,6 @@ class PSCModule(nn.Module):
             self._print_count += 1
 
         return recon.to(torch.complex64), o, p
+
+    def get_psi_diagnostics(self) -> dict[str, float | str | tuple[int, ...]]:
+        return summarize_psi(self.psi)

@@ -1,0 +1,10 @@
+Dictionary Debug Analysis
+Psi shape: (1024, 1024)
+Psi dtype: torch.complex64
+Psi device: cpu
+Column L2 norms: min=1.000000, max=1.000000, mean=1.000000, std=0.000000
+Saved atom indices: [684, 217, 933, 11, 227, 705, 683, 980, 657, 602]
+Random pair correlation |<psi_i, psi_j>|: min=0.000299, max=0.122156, mean=0.009823
+Assessment: the dictionary is not close to a pixel-basis identity because its atoms are non-local stripe / phase textures instead of isolated deltas.
+Assessment: column scales are stable because normalization forces near-unit L2 norms with negligible spread.
+Assessment: sampled atom correlations are non-zero but moderate, so the dictionary shows some coherence without looking highly redundant.
