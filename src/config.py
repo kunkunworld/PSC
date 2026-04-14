@@ -1,0 +1,10 @@
+fc = 9.599e9
+B = 0.591e9
+phi_syn_deg = 2.3
+c = 3e8
+xinterval = 0.202
+yinterval = 0.202
+H = 80
+W = 80
+P = 80
+Q = 80

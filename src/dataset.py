@@ -6,17 +6,17 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
+from src.config import H, W
+
 
 class ComplexImageDataset(Dataset):
     def __init__(
         self,
         data_dir: Union[str, Path] = "data",
-        image_size: int = 80,
-        use_center_crop: bool = True,
+        image_size: int = H,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.image_size = image_size
-        self.use_center_crop = use_center_crop
         self.image_paths = self._collect_image_paths()
         self._print_count = 0
 
@@ -33,27 +33,34 @@ class ComplexImageDataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_paths)
 
-    def _resize_or_crop(self, image: Image.Image) -> Image.Image:
-        if self.use_center_crop:
+    def _center_crop_80x80(self, image: Image.Image) -> Image.Image:
+        target_width = W
+        target_height = H
+        width, height = image.size
+
+        if width < target_width or height < target_height:
+            scale = max(target_width / width, target_height / height)
+            resized_width = max(target_width, int(round(width * scale)))
+            resized_height = max(target_height, int(round(height * scale)))
+            image = image.resize((resized_width, resized_height), Image.BILINEAR)
             width, height = image.size
-            crop_size = min(width, height)
-            left = (width - crop_size) // 2
-            top = (height - crop_size) // 2
-            image = image.crop((left, top, left + crop_size, top + crop_size))
-        return image.resize((self.image_size, self.image_size), Image.BILINEAR)
+
+        left = (width - target_width) // 2
+        top = (height - target_height) // 2
+        return image.crop((left, top, left + target_width, top + target_height))
 
     def __getitem__(self, index: int) -> torch.Tensor:
         image_path = self.image_paths[index]
 
         with Image.open(image_path) as image:
             image = image.convert("L")
-            image = self._resize_or_crop(image)
+            image = self._center_crop_80x80(image)
             amplitude = np.asarray(image, dtype=np.float32) / 255.0
 
         phase = np.random.uniform(
             low=0.0,
             high=2.0 * np.pi,
-            size=(self.image_size, self.image_size),
+            size=(H, W),
         ).astype(np.float32)
 
         complex_img = amplitude * np.exp(1j * phase)
