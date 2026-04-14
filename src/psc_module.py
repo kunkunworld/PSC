@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from src.config import H, W
-from src.psc_dictionary import build_psc_dictionary, summarize_psi
+from src.psc_dictionary import build_psc_operator, summarize_psi
 
 
 class HQSStage(nn.Module):
@@ -36,10 +36,7 @@ class PSCModule(nn.Module):
         self.stages = nn.ModuleList([HQSStage(), HQSStage()])
         self.dictionary_debug = dictionary_debug
         self.dictionary_size = debug_size if dictionary_debug else H
-        self.register_buffer(
-            "psi",
-            build_psc_dictionary(debug=dictionary_debug, debug_size=debug_size),
-        )
+        self.psi = build_psc_operator(debug=dictionary_debug, debug_size=debug_size)
 
     def _dictionary_reconstruct(self, x: torch.Tensor) -> torch.Tensor:
         x_real = x.real.to(torch.float32)
@@ -58,7 +55,7 @@ class PSCModule(nn.Module):
             align_corners=False,
         )
         coeffs = torch.complex(real_small, imag_small).flatten(start_dim=1)
-        recon_flat = coeffs @ self.psi
+        recon_flat = self.psi.psi_forward(coeffs)
         recon_small = recon_flat.view(
             x.shape[0], 1, self.dictionary_size, self.dictionary_size
         )
