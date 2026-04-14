@@ -41,5 +41,9 @@ python train_psc.py
 
 - The current debug dictionary size is `32 x 32`, so `Psi` has shape `[1024, 1024]`.
 - During training, the script saves input amplitude, reconstruction amplitude, `o` heatmap, and `p` heatmap for each epoch in `outputs/`.
-- The current output does not yet indicate a strong or physically validated sparse-scatterer trend.
+- The current reconstruction can look visually dark even when structure is present, because the raw amplitude may occupy a compressed numeric range; `recon_norm.png` is saved to diagnose this display-scale effect.
+- The current raw reconstruction is mainly dark because of dynamic-range compression rather than immediate reconstruction collapse.
+- After min-max normalization, `recon_norm.png` usually reveals that structural content is still present.
+- The current optimization focus has shifted from "can the model reconstruct anything at all" to "can the latent coefficients evolve into truly sparse scatterer points".
+- The current `o` output should not yet be interpreted as a true sparse-scatterer map; in many runs it reflects overall amplitude shrinkage more than isolated physically meaningful bright points.
 - At this stage, `p` comes from a simplified HQS-style approximation, so any sparsity-like pattern should be treated only as a debugging signal rather than a paper-level reconstruction result.

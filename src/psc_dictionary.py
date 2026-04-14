@@ -1,6 +1,8 @@
 import math
+from pathlib import Path
 
 import torch
+from PIL import Image
 
 from src.config import B, H, P, Q, W, c, fc, phi_syn_deg, xinterval, yinterval
 
@@ -10,11 +12,42 @@ def _linspace_extent(num_points: int, spacing: float, device: torch.device) -> t
     return torch.linspace(-half_extent, half_extent, steps=num_points, device=device)
 
 
+def _normalize_to_uint8(image: torch.Tensor) -> Image.Image:
+    image = image.detach().cpu().to(torch.float32)
+    image = image - image.min()
+    max_value = image.max()
+    if max_value > 0:
+        image = image / max_value
+    array = (image.numpy() * 255.0).astype("uint8")
+    return Image.fromarray(array, mode="L")
+
+
+def _save_atom_diagnostics(
+    psi: torch.Tensor, measure_p: int, measure_q: int, debug: bool, debug_size: int
+) -> None:
+    output_dir = Path("outputs") / "psi_atoms"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(0)
+    atom_indices = torch.randperm(psi.shape[1], generator=generator)[:5].tolist()
+    mode_name = f"debug_{debug_size}" if debug else "full_80"
+
+    for atom_idx in atom_indices:
+        atom = psi[:, atom_idx].view(measure_p, measure_q)
+        real_image = _normalize_to_uint8(atom.real)
+        imag_image = _normalize_to_uint8(atom.imag)
+        phase_image = _normalize_to_uint8(torch.angle(atom))
+        real_image.save(output_dir / f"{mode_name}_atom_{atom_idx}_real.png")
+        imag_image.save(output_dir / f"{mode_name}_atom_{atom_idx}_imag.png")
+        phase_image.save(output_dir / f"{mode_name}_atom_{atom_idx}_phase.png")
+
+
 def build_psc_dictionary(
     debug: bool = True,
     debug_size: int = 32,
     device: torch.device | str | None = None,
-    chunk_size: int = 8,
+    chunk_size: int = 128,
 ) -> torch.Tensor:
     if device is None:
         device = torch.device("cpu")
@@ -26,14 +59,13 @@ def build_psc_dictionary(
     measure_p = debug_size if debug else P
     measure_q = debug_size if debug else Q
 
-    x_coords = _linspace_extent(signal_w, xinterval, device)
-    y_coords = _linspace_extent(signal_h, yinterval, device)
-    yy, xx = torch.meshgrid(y_coords, x_coords, indexing="ij")
-    spatial_grid = xx.reshape(-1)
-    range_grid = yy.reshape(-1)
+    scatter_x = _linspace_extent(signal_w, xinterval, device)
+    scatter_y = _linspace_extent(signal_h, yinterval, device)
+    yy, xx = torch.meshgrid(scatter_y, scatter_x, indexing="ij")
+    scatter_positions = torch.stack((xx.reshape(-1), yy.reshape(-1)), dim=1)
 
     phi_syn = math.radians(phi_syn_deg)
-    view_angles = torch.linspace(
+    phi = torch.linspace(
         -phi_syn / 2.0,
         phi_syn / 2.0,
         steps=measure_q,
@@ -47,26 +79,41 @@ def build_psc_dictionary(
         device=device,
         dtype=torch.float32,
     )
-    wavenumbers = 2.0 * math.pi * frequencies / c
 
-    steering = (
-        torch.cos(view_angles).unsqueeze(1) * range_grid.unsqueeze(0)
-        + torch.sin(view_angles).unsqueeze(1) * spatial_grid.unsqueeze(0)
+    phase_projection = (
+        scatter_positions[:, 0].unsqueeze(1) * torch.cos(phi).unsqueeze(0)
+        + scatter_positions[:, 1].unsqueeze(1) * torch.sin(phi).unsqueeze(0)
     )
 
     signal_dim = signal_h * signal_w
     measure_dim = measure_p * measure_q
     psi = torch.empty((measure_dim, signal_dim), dtype=torch.complex64, device=device)
 
-    scale = 1.0 / math.sqrt(signal_dim)
     write_row = 0
     for start in range(0, measure_p, chunk_size):
         end = min(start + chunk_size, measure_p)
-        phase = wavenumbers[start:end].view(-1, 1, 1) * steering.view(1, measure_q, -1)
-        block = torch.polar(torch.ones_like(phase), -phase) * scale
-        block_rows = (end - start) * measure_q
-        psi[write_row : write_row + block_rows] = block.reshape(block_rows, signal_dim)
-        write_row += block_rows
+        frequency_block = frequencies[start:end]
+        phase = (
+            -(4.0 * math.pi / c)
+            * frequency_block.view(-1, 1, 1)
+            * phase_projection.view(1, signal_dim, measure_q)
+        )
+        atom_block = torch.polar(torch.ones_like(phase), phase)
+        atom_block = atom_block.permute(0, 2, 1).reshape(-1, signal_dim)
+        psi[write_row : write_row + atom_block.shape[0]] = atom_block
+        write_row += atom_block.shape[0]
 
+    column_norms = torch.linalg.vector_norm(psi, ord=2, dim=0, keepdim=True).clamp_min(1e-12)
+    psi = psi / column_norms
+
+    norm_values = torch.linalg.vector_norm(psi, ord=2, dim=0)
     print(f"Psi shape: {psi.shape}, dtype: {psi.dtype}, device: {psi.device}")
+    print(
+        "Psi column norms: "
+        f"min={norm_values.min().item():.6f}, "
+        f"max={norm_values.max().item():.6f}, "
+        f"mean={norm_values.mean().item():.6f}"
+    )
+
+    _save_atom_diagnostics(psi, measure_p, measure_q, debug=debug, debug_size=debug_size)
     return psi
