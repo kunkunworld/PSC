@@ -1,0 +1,9 @@
+outputs/
+*.pt
+*.pth
+*.npy
+*.npz
+*.ckpt
+*.onnx
+__pycache__/
+*.pyc
